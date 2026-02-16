@@ -1,0 +1,558 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover" />
+  <title>LemonSNES</title>
+  <style>
+    :root { 
+      --bg: #050505; 
+      --acc: #a29bfe; /* SNES Purple-ish tint */
+      --acc-glow: rgba(162, 155, 254, 0.4);
+      --glass: rgba(255, 255, 255, 0.06);
+      --glass-border: rgba(255, 255, 255, 0.1);
+      --text-muted: rgba(255, 255, 255, 0.4);
+      --fg:#e8f0ff; 
+      --muted:#8aa0b6; 
+      --card:#121926;
+      
+      /* SNES Button Colors */
+      --btn-a: #e74c3c;
+      --btn-b: #f1c40f;
+      --btn-x: #3498db;
+      --btn-y: #2ecc71;
+    }
+
+    html, body {
+      margin: 0;
+      background: var(--bg);
+      height: 100vh;
+      width: 100vw;
+      overflow: hidden;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+      color: var(--fg);
+      touch-action: none;
+      user-select: none;
+      -webkit-user-select: none;
+    }
+
+    body {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: flex-start;
+    }
+
+    /* === CANVAS CONTAINER === */
+    .game-container {
+      position: relative;
+      width: 100%;
+      flex: 0 1 auto;
+      display: flex;
+      align-items: flex-start;
+      justify-content: center;
+      z-index: 1;
+      padding-top: 60px;
+      max-height: 55vh;
+    }
+
+    .screen-wrapper {
+      background: #000;
+      aspect-ratio: 256/224; /* SNES Resolution */
+      width: 90vw;
+      max-width: 90vw;
+      height: auto;
+      max-height: 100%;
+      box-shadow: 0 0 50px rgba(0,0,0,0.5);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      position: relative;
+      border-radius: 12px;
+    }
+
+    canvas {
+      image-rendering: pixelated; /* Crisp pixels */
+      background: #000;
+      touch-action: none;
+      width: 100%;
+      height: 100%;
+      border-radius: 12px;
+      outline: none;
+    }
+
+    .scanlines {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      pointer-events: none;
+      background: repeating-linear-gradient(0deg, rgba(0, 0, 0, 0.15), rgba(0, 0, 0, 0.15) 1px, transparent 1px, transparent 2px);
+      border-radius: 12px;
+      display: none;
+    }
+    .scanlines.active { display: block; }
+
+    /* === UI OVERLAY LAYER === */
+    .ui-layer {
+      position: absolute;
+      top: 0; left: 0; right: 0; bottom: 0;
+      z-index: 10;
+      pointer-events: none;
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+      padding: env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left);
+    }
+
+    .top-bar {
+      display: flex;
+      justify-content: space-between;
+      padding: 20px;
+      pointer-events: auto;
+    }
+
+    .icon-btn {
+      width: 44px; height: 44px;
+      border-radius: 50%;
+      background: var(--glass);
+      backdrop-filter: blur(10px);
+      -webkit-backdrop-filter: blur(10px);
+      border: 1px solid var(--glass-border);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: var(--text-muted);
+      cursor: pointer;
+      transition: all 0.2s ease;
+      font-size: 20px;
+    }
+    .icon-btn:hover { background: rgba(255,255,255,0.1); color: #fff; }
+    .icon-btn:active, .icon-btn.active { transform: scale(0.95); background: var(--acc); color: #000; border-color: var(--acc); }
+
+    /* === TOUCH CONTROLS === */
+    .controls-area {
+      flex: 1;
+      position: relative;
+      pointer-events: none;
+      display: flex;
+      flex-direction: column;
+      justify-content: flex-end;
+      padding-bottom: 20px;
+    }
+
+    .touch-btn {
+      pointer-events: auto;
+      background: var(--glass);
+      backdrop-filter: blur(12px);
+      -webkit-backdrop-filter: blur(12px);
+      border: 1px solid var(--glass-border);
+      transition: transform 0.05s, background 0.1s, box-shadow 0.1s;
+      cursor: pointer;
+      -webkit-tap-highlight-color: transparent; 
+    }
+
+    /* Active State */
+    .touch-btn.active, .touch-btn:active {
+      background: rgba(255, 255, 255, 0.15);
+      border-color: var(--acc);
+      box-shadow: 0 0 15px var(--acc-glow);
+      transform: scale(0.92);
+    }
+
+    /* SHOULDER BUTTONS */
+    .shoulders-pad {
+      position: absolute;
+      bottom: 260px; /* Above D-pad */
+      left: 0;
+      right: 0;
+      display: flex;
+      justify-content: space-between;
+      padding: 0 5vw;
+      z-index: 5;
+      pointer-events: none;
+    }
+    
+    .btn-shoulder {
+        width: 100px; height: 36px;
+        border-radius: 12px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-weight: 700;
+        font-size: 14px;
+        color: var(--text-muted);
+        pointer-events: auto;
+        border-bottom: 4px solid rgba(0,0,0,0.2);
+    }
+
+    /* MENU PILLS (Start/Select) */
+    .menu-pad {
+      position: absolute;
+      bottom: 20px;
+      left: 0;
+      right: 0;
+      display: flex;
+      justify-content: center;
+      gap: 20px;
+      z-index: 5;
+      pointer-events: none;
+    }
+    .btn-pill {
+      width: 70px; height: 24px;
+      border-radius: 20px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 10px;
+      color: var(--text-muted);
+      font-weight: 600;
+      pointer-events: auto;
+      transform: rotate(-15deg); /* Classic SNES slant */
+      margin-bottom: 20px;
+    }
+
+    /* D-PAD */
+    .d-pad {
+      position: absolute;
+      bottom: 40px;
+      left: 5vw;
+      display: grid;
+      grid-template-columns: repeat(3, 55px);
+      grid-template-rows: repeat(3, 55px);
+      gap: 4px;
+    }
+
+    .d-btn { 
+      display: flex; 
+      align-items: center; 
+      justify-content: center; 
+    }
+    
+    .chevron {
+      border: solid rgba(255,255,255,0.3);
+      border-width: 0 3px 3px 0;
+      display: inline-block;
+      padding: 6px;
+      transition: border-color 0.1s;
+    }
+    .touch-btn.active .chevron, .touch-btn:active .chevron { border-color: var(--acc); }
+
+    .up .chevron { transform: rotate(-135deg) translateY(-2px); }
+    .down .chevron { transform: rotate(45deg) translateY(-2px); }
+    .left .chevron { transform: rotate(135deg) translateY(-2px); }
+    .right .chevron { transform: rotate(-45deg) translateY(-2px); }
+
+    .d-btn.up    { grid-area: 1/2; border-radius: 12px 12px 4px 4px; }
+    .d-btn.down  { grid-area: 3/2; border-radius: 4px 4px 12px 12px; }
+    .d-btn.left  { grid-area: 2/1; border-radius: 12px 4px 4px 12px; }
+    .d-btn.right { grid-area: 2/3; border-radius: 4px 12px 12px 4px; }
+
+    /* ACTION BUTTONS - DIAMOND LAYOUT */
+    .ab-pad {
+      position: absolute;
+      bottom: 40px;
+      right: 5vw;
+      width: 170px;
+      height: 170px;
+      display: block;
+    }
+
+    .btn-circle {
+      position: absolute;
+      width: 58px; height: 58px;
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-weight: 800;
+      font-size: 20px;
+      color: rgba(255,255,255,0.8);
+      box-shadow: inset 0 2px 10px rgba(0,0,0,0.2); 
+    }
+    
+    /* Diamond Positioning */
+    .btn-x { top: 0; left: 50%; transform: translateX(-50%); color: var(--btn-x); border-color: rgba(52, 152, 219, 0.3); }
+    .btn-y { top: 50%; left: 0; transform: translateY(-50%); color: var(--btn-y); border-color: rgba(46, 204, 113, 0.3); }
+    .btn-a { top: 50%; right: 0; transform: translateY(-50%); color: var(--btn-a); border-color: rgba(231, 76, 60, 0.3); }
+    .btn-b { bottom: 0; left: 50%; transform: translateX(-50%); color: var(--btn-b); border-color: rgba(241, 196, 15, 0.3); }
+    
+    .btn-circle.active, .btn-circle:active { color: #fff; border-color: #fff; background: rgba(255,255,255,0.2); }
+    
+    .btn-x.active { background: var(--btn-x); color: #000; box-shadow: 0 0 15px var(--btn-x); }
+    .btn-y.active { background: var(--btn-y); color: #000; box-shadow: 0 0 15px var(--btn-y); }
+    .btn-a.active { background: var(--btn-a); color: #000; box-shadow: 0 0 15px var(--btn-a); }
+    .btn-b.active { background: var(--btn-b); color: #000; box-shadow: 0 0 15px var(--btn-b); }
+
+    /* Settings Modal Styles - kept mostly same */
+    .settings-modal { 
+      display: none; 
+      position: fixed; 
+      top: 0; left: 0; width: 100%; height: 100%; 
+      background: rgba(5, 5, 5, 0.95); 
+      z-index: 2000; 
+      align-items: center; justify-content: center; 
+      backdrop-filter: blur(20px); -webkit-backdrop-filter: blur(20px);
+    }
+    .settings-modal.active { display: flex; }
+    .settings-container { 
+      background: var(--glass); 
+      backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px);
+      border: 1px solid var(--glass-border); 
+      border-radius: 16px; 
+      width: 90%; max-width: 600px; max-height: 85vh; 
+      overflow: hidden; 
+      box-shadow: 0 20px 60px rgba(0,0,0,0.6); 
+      display: flex; flex-direction: column; 
+    }
+    .settings-header { 
+      background: rgba(255,255,255,0.05); padding: 18px 24px; 
+      font-size: 20px; font-weight: 600; 
+      border-bottom: 1px solid var(--glass-border); color: var(--fg); 
+      display: flex; justify-content: space-between; align-items: center; 
+    }
+    .settings-close { cursor: pointer; padding: 10px; }
+    .settings-body { flex: 1; padding: 24px; overflow-y: auto; }
+    .setting-row { margin-bottom: 20px; }
+    .btn-primary { 
+      background: var(--acc); color: #000; border: none; 
+      padding: 10px 20px; border-radius: 8px; font-weight: bold; cursor: pointer; 
+    }
+    input[type="file"] { display: none; }
+
+    /* Media Queries for Landscape */
+    @media (orientation: landscape) {
+      .game-container { max-height: 80vh; padding-top: 20px; }
+      .screen-wrapper { height: 75vh; width: auto; aspect-ratio: 4/3; }
+      .d-pad { bottom: 20px; left: 30px; }
+      .ab-pad { bottom: 20px; right: 30px; }
+      .shoulders-pad { bottom: 200px; padding: 0 30px; }
+      .menu-pad { bottom: 10px; }
+    }
+    
+    /* Desktop */
+    @media (pointer: fine) {
+        .controls-area { opacity: 0; transition: 0.3s; }
+        .controls-area:hover { opacity: 1; }
+    }
+  </style>
+</head>
+<body>
+
+  <div class="game-container" id="gameContainer">
+    <div class="screen-wrapper">
+      <canvas id="canvas" tabindex="1" oncontextmenu="event.preventDefault()"></canvas>
+      <div class="scanlines" id="scanlines"></div>
+    </div>
+  </div>
+
+  <div class="ui-layer">
+    
+    <div class="top-bar">
+      <label for="romInput" class="icon-btn" title="Load ROM">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"></path></svg>
+      </label>
+      <input type="file" id="romInput" accept=".sfc,.smc,.zip" style="display:none;">
+      
+      <div class="icon-btn" id="btnSettings" title="Settings">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"></circle><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path></svg>
+      </div>
+    </div>
+
+    <div class="controls-area" id="controls">
+      
+      <div class="shoulders-pad">
+        <div class="touch-btn btn-shoulder" data-key="81" title="L">L</div>
+        <div class="touch-btn btn-shoulder" data-key="87" title="R">R</div>
+      </div>
+
+      <div class="menu-pad">
+        <div class="touch-btn btn-pill" data-key="16" title="Select">SELECT</div>
+        <div class="touch-btn btn-pill" data-key="13" title="Start">START</div>
+      </div>
+
+      <div class="d-pad">
+        <div class="touch-btn d-btn up" data-key="38" title="Up"><span class="chevron"></span></div>
+        <div class="touch-btn d-btn down" data-key="40" title="Down"><span class="chevron"></span></div>
+        <div class="touch-btn d-btn left" data-key="37" title="Left"><span class="chevron"></span></div>
+        <div class="touch-btn d-btn right" data-key="39" title="Right"><span class="chevron"></span></div>
+      </div>
+
+      <div class="ab-pad">
+        <div class="touch-btn btn-circle btn-x" data-key="83" title="X">X</div>
+        <div class="touch-btn btn-circle btn-y" data-key="65" title="Y">Y</div>
+        <div class="touch-btn btn-circle btn-b" data-key="90" title="B">B</div>
+        <div class="touch-btn btn-circle btn-a" data-key="88" title="A">A</div>
+      </div>
+
+    </div>
+  </div>
+
+  <div class="settings-modal" id="settingsModal">
+    <div class="settings-container">
+      <div class="settings-header">
+        Settings
+        <span class="settings-close" onclick="closeSettings()">×</span>
+      </div>
+      <div class="settings-body">
+        
+        <div class="setting-row">
+            <h3>Visuals</h3>
+            <label>
+                <input type="checkbox" id="checkScanlines" onchange="document.getElementById('scanlines').classList.toggle('active', this.checked)"> Enable Scanlines
+            </label>
+        </div>
+
+        <div class="setting-row">
+            <h3>Controls</h3>
+            <p>Keyboard Mappings:</p>
+            <ul>
+                <li>D-Pad: Arrow Keys</li>
+                <li>A: X</li>
+                <li>B: Z</li>
+                <li>X: S</li>
+                <li>Y: A</li>
+                <li>L: Q</li>
+                <li>R: W</li>
+                <li>Start: Enter</li>
+                <li>Select: Shift</li>
+            </ul>
+        </div>
+        
+        <div class="setting-row">
+            <button class="btn-primary" onclick="Module.requestFullScreen(true, false)">Enter Fullscreen</button>
+        </div>
+
+      </div>
+    </div>
+  </div>
+
+<script>
+    // === EMSCRIPTEN GLUE CODE ===
+    // This connects the HTML UI to the WASM core
+    
+    var Module = {
+        preRun: [],
+        postRun: [],
+        print: (function() {
+            return function(text) {
+                if (arguments.length > 1) text = Array.prototype.slice.call(arguments).join(' ');
+                console.log(text);
+            };
+        })(),
+        printErr: function(text) {
+            if (arguments.length > 1) text = Array.prototype.slice.call(arguments).join(' ');
+            console.error(text);
+        },
+        canvas: (function() {
+            var canvas = document.getElementById('canvas');
+            canvas.addEventListener("webglcontextlost", function(e) { alert('WebGL context lost. You will need to reload the page.'); e.preventDefault(); }, false);
+            return canvas;
+        })(),
+        setStatus: function(text) {
+            console.log("Status: " + text);
+        },
+        totalDependencies: 0,
+        monitorRunDependencies: function(left) {
+            this.totalDependencies = Math.max(this.totalDependencies, left);
+        }
+    };
+
+    // === ROM LOADING LOGIC ===
+    const romInput = document.getElementById('romInput');
+    
+    romInput.addEventListener('change', function(e) {
+        const file = e.target.files[0];
+        if (!file) return;
+
+        const reader = new FileReader();
+        reader.onload = function(e) {
+            const data = new Uint8Array(e.target.result);
+            
+            // Create the file in the Emscripten Virtual File System
+            try {
+                // Ensure FS is ready
+                if(Module.FS) {
+                    // Libretro cores often look for specific file extensions or just raw bytes
+                    // We write to a virtual file 'game.sfc'
+                    Module.FS.writeFile('/game.sfc', data);
+                    console.log('ROM loaded into memory.');
+                    
+                    // Call the main entry point if the core hasn't started, 
+                    // or trigger a reset/load function if your WASM build supports it.
+                    // For many RetroArch web builds, we pass arguments to main:
+                    Module.callMain(['/game.sfc']);
+                } else {
+                    alert("Emulator core not loaded yet. Please wait.");
+                }
+            } catch (err) {
+                console.error(err);
+                alert("Error loading ROM: " + err);
+            }
+        };
+        reader.readAsArrayBuffer(file);
+        
+        // Close menu if open
+        closeSettings();
+    });
+
+    // === UI LOGIC ===
+    
+    // UI Helpers
+    const settingsModal = document.getElementById('settingsModal');
+    const btnSettings = document.getElementById('btnSettings');
+    
+    btnSettings.addEventListener('click', () => {
+        settingsModal.classList.add('active');
+    });
+
+    window.closeSettings = () => {
+        settingsModal.classList.remove('active');
+    };
+
+    // Touch Controls -> Keyboard Event Emulation
+    // This allows the touch buttons to drive the standard libretro input loop
+    // which usually listens for standard keyboard codes.
+    
+    const simulateKey = (keyCode, type) => {
+        const event = new KeyboardEvent(type, {
+            bubbles: true, 
+            cancelable: true, 
+            keyCode: keyCode,
+            which: keyCode
+        });
+        window.dispatchEvent(event);
+        // Also dispatch to canvas just in case
+        Module.canvas.dispatchEvent(event);
+    };
+
+    document.querySelectorAll('.touch-btn').forEach(btn => {
+        const code = parseInt(btn.dataset.key);
+        
+        const handleStart = (e) => {
+            e.preventDefault();
+            btn.classList.add('active');
+            if (navigator.vibrate) navigator.vibrate(10);
+            simulateKey(code, 'keydown');
+        };
+        
+        const handleEnd = (e) => {
+            e.preventDefault();
+            btn.classList.remove('active');
+            simulateKey(code, 'keyup');
+        };
+
+        btn.addEventListener('touchstart', handleStart, {passive: false});
+        btn.addEventListener('touchend', handleEnd, {passive: false});
+        btn.addEventListener('mousedown', handleStart); // For mouse debugging
+        btn.addEventListener('mouseup', handleEnd);
+        btn.addEventListener('mouseleave', handleEnd);
+    });
+
+</script>
+
+<script async src="snes9x_libretro.js"></script>
+
+</body>
+</html>
