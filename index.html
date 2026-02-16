@@ -430,44 +430,28 @@
 
 <script>
     // === EMSCRIPTEN GLUE CODE ===
-    // This connects the HTML UI to the WASM core
-    
     var Module = {
-    // 1. Prevents the emulator from trying to start automatically without a ROM
-    noInitialRun: true,
-    
-    preRun: [],
-    postRun: [],
-    
-    // 2. Standard output redirection
-    print: (text) => console.log(text),
-    printErr: (text) => console.error(text),
-    
-    // 3. Optimized Canvas Handling
-    canvas: (function() {
-        var canvas = document.getElementById('canvas');
-        // Handle WebGL loss
-        canvas.addEventListener("webglcontextlost", (e) => { 
-            alert('WebGL context lost. Please reload.'); 
-            e.preventDefault(); 
-        }, false);
-        return canvas;
-    })(),
-
-    // 4. Required by many Libretro ports to find the WASM file
-    locateFile: function(path, prefix) {
-        if (path.endsWith(".wasm")) return "snes9x_libretro.wasm";
-        return prefix + path;
-    },
-
-    // 5. Vital for SNES: Ensures the game loop runs at the correct speed
-    onRuntimeInitialized: function() {
-        console.log("Core Loaded. Ready for ROM...");
-    },
-
-    // 6. Environment arguments
-    arguments: []
-};
+        noInitialRun: true,
+        preRun: [],
+        postRun: [],
+        print: (text) => console.log(text),
+        printErr: (text) => console.error(text),
+        canvas: (function() {
+            var canvas = document.getElementById('canvas');
+            canvas.addEventListener("webglcontextlost", (e) => { 
+                alert('WebGL context lost. Please reload.'); 
+                e.preventDefault(); 
+            }, false);
+            return canvas;
+        })(),
+        locateFile: function(path, prefix) {
+            if (path.endsWith(".wasm")) return "snes9x_libretro.wasm";
+            return prefix + path;
+        },
+        onRuntimeInitialized: function() {
+            console.log("SNES Core Loaded & Ready.");
+        }
+    };
 
     // === ROM LOADING LOGIC ===
     const romInput = document.getElementById('romInput');
@@ -477,73 +461,61 @@
         if (!file) return;
 
         const reader = new FileReader();
-       reader.onload = function(e) {
-    const data = new Uint8Array(e.target.result);
-    FS.writeFile('/game.sfc', data);
+        reader.onload = function(event) {
+            const data = new Uint8Array(event.target.result);
 
-    // FIX: Resume Audio Context before starting
-    const audioCtx = window.SDL2 ? SDL2.audioContext : null;
-    if (audioCtx && audioCtx.state === 'suspended') {
-        audioCtx.resume();
-    }
+            try {
+                // Access FS through Module to ensure it's the correct instance
+                if (Module.FS) {
+                    // Write file to the virtual filesystem
+                    Module.FS.writeFile('/game.sfc', data);
+                    console.log("ROM written to Virtual FS.");
 
-    // Start the emulator
-    Module.callMain(['/game.sfc']);
-};
+                    // Resume Audio: Browsers block audio until a click happens
+                    const audioContext = window.SDL2 ? SDL2.audioContext : null;
+                    if (audioContext && audioContext.state === 'suspended') {
+                        audioContext.resume();
+                    }
+
+                    // Start the core with the ROM path
+                    Module.callMain(['/game.sfc']);
                 } else {
-                    alert("Emulator core not loaded yet. Please wait.");
+                    alert("WASM FS not initialized. Wait a few seconds and try again.");
                 }
             } catch (err) {
-                console.error(err);
-                alert("Error loading ROM: " + err);
+                console.error("Initialization error:", err);
             }
         };
         reader.readAsArrayBuffer(file);
-        
-        // Close menu if open
         closeSettings();
     });
 
-    // === UI LOGIC ===
-    
-    // UI Helpers
+    // === UI & INPUT LOGIC ===
     const settingsModal = document.getElementById('settingsModal');
     const btnSettings = document.getElementById('btnSettings');
     
-    btnSettings.addEventListener('click', () => {
-        settingsModal.classList.add('active');
-    });
+    btnSettings.addEventListener('click', () => settingsModal.classList.add('active'));
+    window.closeSettings = () => settingsModal.classList.remove('active');
 
-    window.closeSettings = () => {
-        settingsModal.classList.remove('active');
-    };
-
-    // Touch Controls -> Keyboard Event Emulation
-    // This allows the touch buttons to drive the standard libretro input loop
-    // which usually listens for standard keyboard codes.
-    
+    // SNES Input Bridge
     const simulateKey = (keyCode, type) => {
         const event = new KeyboardEvent(type, {
-            bubbles: true, 
-            cancelable: true, 
+            bubbles: true,
+            cancelable: true,
             keyCode: keyCode,
             which: keyCode
         });
         window.dispatchEvent(event);
-        // Also dispatch to canvas just in case
-        Module.canvas.dispatchEvent(event);
     };
 
     document.querySelectorAll('.touch-btn').forEach(btn => {
         const code = parseInt(btn.dataset.key);
-        
         const handleStart = (e) => {
             e.preventDefault();
             btn.classList.add('active');
             if (navigator.vibrate) navigator.vibrate(10);
             simulateKey(code, 'keydown');
         };
-        
         const handleEnd = (e) => {
             e.preventDefault();
             btn.classList.remove('active');
@@ -552,11 +524,10 @@
 
         btn.addEventListener('touchstart', handleStart, {passive: false});
         btn.addEventListener('touchend', handleEnd, {passive: false});
-        btn.addEventListener('mousedown', handleStart); // For mouse debugging
+        btn.addEventListener('mousedown', handleStart);
         btn.addEventListener('mouseup', handleEnd);
         btn.addEventListener('mouseleave', handleEnd);
     });
-
 </script>
 
 <script async src="snes9x_libretro.js"></script>
