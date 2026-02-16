@@ -429,7 +429,69 @@
   </div>
 
 <script>
-    // 1. Define the config object FIRST
+   // Mapping SNES buttons to standard Keyboard Strings and Codes
+const keyMap = {
+    "38": { key: "ArrowUp", code: "ArrowUp" },
+    "40": { key: "ArrowDown", code: "ArrowDown" },
+    "37": { key: "ArrowLeft", code: "ArrowLeft" },
+    "39": { key: "ArrowRight", code: "ArrowRight" },
+    "88": { key: "x", code: "KeyX" },     // A button
+    "90": { key: "z", code: "KeyZ" },     // B button
+    "83": { key: "s", code: "KeyS" },     // X button
+    "65": { key: "a", code: "KeyA" },     // Y button
+    "81": { key: "q", code: "KeyQ" },     // L shoulder
+    "87": { key: "w", code: "KeyW" },     // R shoulder
+    "13": { key: "Enter", code: "Enter" }, // Start
+    "16": { key: "Shift", code: "ShiftLeft" } // Select
+};
+
+const simulateKey = (keyCode, type) => {
+    const data = keyMap[keyCode.toString()];
+    if (!data) return;
+
+    // Create the event with all possible identifiers
+    const event = new KeyboardEvent(type, {
+        key: data.key,
+        code: data.code,
+        keyCode: keyCode,
+        which: keyCode,
+        bubbles: true,
+        cancelable: true
+    });
+
+    // 1. Dispatch to window
+    window.dispatchEvent(event);
+    
+    // 2. Dispatch directly to the canvas (CRITICAL for WASM)
+    if (Module.canvas) {
+        Module.canvas.focus();
+        Module.canvas.dispatchEvent(event);
+    }
+};
+
+// Update your button listeners to use this
+document.querySelectorAll('.touch-btn').forEach(btn => {
+    const keyCode = btn.dataset.key;
+    
+    const handleStart = (e) => {
+        e.preventDefault();
+        btn.classList.add('active');
+        if (navigator.vibrate) navigator.vibrate(15);
+        simulateKey(keyCode, 'keydown');
+    };
+    
+    const handleEnd = (e) => {
+        e.preventDefault();
+        btn.classList.remove('active');
+        simulateKey(keyCode, 'keyup');
+    };
+
+    btn.addEventListener('touchstart', handleStart, {passive: false});
+    btn.addEventListener('touchend', handleEnd, {passive: false});
+    btn.addEventListener('mousedown', handleStart);
+    btn.addEventListener('mouseup', handleEnd);
+});
+  // 1. Define the config object FIRST
     window.Module = {
         noInitialRun: true,
         canvas: document.getElementById('canvas'),
