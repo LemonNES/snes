@@ -477,22 +477,19 @@
         if (!file) return;
 
         const reader = new FileReader();
-        reader.onload = function(e) {
-            const data = new Uint8Array(e.target.result);
-            
-            // Create the file in the Emscripten Virtual File System
-            try {
-                // Ensure FS is ready
-                if(Module.FS) {
-                    // Libretro cores often look for specific file extensions or just raw bytes
-                    // We write to a virtual file 'game.sfc'
-                    Module.FS.writeFile('/game.sfc', data);
-                    console.log('ROM loaded into memory.');
-                    
-                    // Call the main entry point if the core hasn't started, 
-                    // or trigger a reset/load function if your WASM build supports it.
-                    // For many RetroArch web builds, we pass arguments to main:
-                    Module.callMain(['/game.sfc']);
+       reader.onload = function(e) {
+    const data = new Uint8Array(e.target.result);
+    FS.writeFile('/game.sfc', data);
+
+    // FIX: Resume Audio Context before starting
+    const audioCtx = window.SDL2 ? SDL2.audioContext : null;
+    if (audioCtx && audioCtx.state === 'suspended') {
+        audioCtx.resume();
+    }
+
+    // Start the emulator
+    Module.callMain(['/game.sfc']);
+};
                 } else {
                     alert("Emulator core not loaded yet. Please wait.");
                 }
