@@ -429,106 +429,54 @@
   </div>
 
 <script>
-    // === EMSCRIPTEN GLUE CODE ===
-    var Module = {
+    // 1. Define the config object FIRST
+    window.Module = {
         noInitialRun: true,
-        preRun: [],
-        postRun: [],
+        canvas: document.getElementById('canvas'),
         print: (text) => console.log(text),
         printErr: (text) => console.error(text),
-        canvas: (function() {
-            var canvas = document.getElementById('canvas');
-            canvas.addEventListener("webglcontextlost", (e) => { 
-                alert('WebGL context lost. Please reload.'); 
-                e.preventDefault(); 
-            }, false);
-            return canvas;
-        })(),
-        locateFile: function(path, prefix) {
-            if (path.endsWith(".wasm")) return "snes9x_libretro.wasm";
-            return prefix + path;
-        },
-        onRuntimeInitialized: function() {
-            console.log("SNES Core Loaded & Ready.");
-        }
+        locateFile: (path) => path.endsWith('.wasm') ? 'snes9x_libretro.wasm' : path,
     };
 
-    // === ROM LOADING LOGIC ===
-    const romInput = document.getElementById('romInput');
-    
-    romInput.addEventListener('change', function(e) {
+    // 2. ROM Loading Logic
+    document.getElementById('romInput').addEventListener('change', function(e) {
         const file = e.target.files[0];
         if (!file) return;
 
         const reader = new FileReader();
         reader.onload = function(event) {
             const data = new Uint8Array(event.target.result);
+            
+            // Check if Module.FS (from the initialized instance) is ready
+            if (Module.FS) {
+                Module.FS.writeFile('/game.sfc', data);
+                
+                // Resume audio for browser requirements
+                const audioCtx = window.SDL2 ? SDL2.audioContext : null;
+                if (audioCtx) audioCtx.resume();
 
-            try {
-                // Access FS through Module to ensure it's the correct instance
-                if (Module.FS) {
-                    // Write file to the virtual filesystem
-                    Module.FS.writeFile('/game.sfc', data);
-                    console.log("ROM written to Virtual FS.");
-
-                    // Resume Audio: Browsers block audio until a click happens
-                    const audioContext = window.SDL2 ? SDL2.audioContext : null;
-                    if (audioContext && audioContext.state === 'suspended') {
-                        audioContext.resume();
-                    }
-
-                    // Start the core with the ROM path
-                    Module.callMain(['/game.sfc']);
-                } else {
-                    alert("WASM FS not initialized. Wait a few seconds and try again.");
-                }
-            } catch (err) {
-                console.error("Initialization error:", err);
+                Module.callMain(['/game.sfc']);
+            } else {
+                alert("Core still loading, please try again in a second.");
             }
         };
         reader.readAsArrayBuffer(file);
-        closeSettings();
-    });
-
-    // === UI & INPUT LOGIC ===
-    const settingsModal = document.getElementById('settingsModal');
-    const btnSettings = document.getElementById('btnSettings');
-    
-    btnSettings.addEventListener('click', () => settingsModal.classList.add('active'));
-    window.closeSettings = () => settingsModal.classList.remove('active');
-
-    // SNES Input Bridge
-    const simulateKey = (keyCode, type) => {
-        const event = new KeyboardEvent(type, {
-            bubbles: true,
-            cancelable: true,
-            keyCode: keyCode,
-            which: keyCode
-        });
-        window.dispatchEvent(event);
-    };
-
-    document.querySelectorAll('.touch-btn').forEach(btn => {
-        const code = parseInt(btn.dataset.key);
-        const handleStart = (e) => {
-            e.preventDefault();
-            btn.classList.add('active');
-            if (navigator.vibrate) navigator.vibrate(10);
-            simulateKey(code, 'keydown');
-        };
-        const handleEnd = (e) => {
-            e.preventDefault();
-            btn.classList.remove('active');
-            simulateKey(code, 'keyup');
-        };
-
-        btn.addEventListener('touchstart', handleStart, {passive: false});
-        btn.addEventListener('touchend', handleEnd, {passive: false});
-        btn.addEventListener('mousedown', handleStart);
-        btn.addEventListener('mouseup', handleEnd);
-        btn.addEventListener('mouseleave', handleEnd);
     });
 </script>
+
+<script type="module">
+    import createModule from './snes9x_libretro.js';
+    
+    // Initialize the WASM using the factory function
+    createModule(window.Module).then((instance) => {
+        // Update the global Module with the running instance (includes FS, callMain, etc)
+        window.Module = instance;
+        console.log("WebAssembly Module Loaded Successfully");
+    }).catch(err => {
+        console.error("Failed to load WASM:", err);
+    });
+</script>
+  
 <script type="module">
   import createModule from './snes9x_libretro.js';
   
