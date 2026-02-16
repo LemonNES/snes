@@ -429,75 +429,16 @@
   </div>
 
 <script>
-   // Mapping SNES buttons to standard Keyboard Strings and Codes
-const keyMap = {
-    "38": { key: "ArrowUp", code: "ArrowUp" },
-    "40": { key: "ArrowDown", code: "ArrowDown" },
-    "37": { key: "ArrowLeft", code: "ArrowLeft" },
-    "39": { key: "ArrowRight", code: "ArrowRight" },
-    "88": { key: "x", code: "KeyX" },     // A button
-    "90": { key: "z", code: "KeyZ" },     // B button
-    "83": { key: "s", code: "KeyS" },     // X button
-    "65": { key: "a", code: "KeyA" },     // Y button
-    "81": { key: "q", code: "KeyQ" },     // L shoulder
-    "87": { key: "w", code: "KeyW" },     // R shoulder
-    "13": { key: "Enter", code: "Enter" }, // Start
-    "16": { key: "Shift", code: "ShiftLeft" } // Select
-};
-
-const simulateKey = (keyCode, type) => {
-    const data = keyMap[keyCode.toString()];
-    if (!data) return;
-
-    // Create the event with all possible identifiers
-    const event = new KeyboardEvent(type, {
-        key: data.key,
-        code: data.code,
-        keyCode: keyCode,
-        which: keyCode,
-        bubbles: true,
-        cancelable: true
-    });
-
-    // 1. Dispatch to window
-    window.dispatchEvent(event);
-    
-    // 2. Dispatch directly to the canvas (CRITICAL for WASM)
-    if (Module.canvas) {
-        Module.canvas.focus();
-        Module.canvas.dispatchEvent(event);
-    }
-};
-
-// Update your button listeners to use this
-document.querySelectorAll('.touch-btn').forEach(btn => {
-    const keyCode = btn.dataset.key;
-    
-    const handleStart = (e) => {
-        e.preventDefault();
-        btn.classList.add('active');
-        if (navigator.vibrate) navigator.vibrate(15);
-        simulateKey(keyCode, 'keydown');
-    };
-    
-    const handleEnd = (e) => {
-        e.preventDefault();
-        btn.classList.remove('active');
-        simulateKey(keyCode, 'keyup');
-    };
-
-    btn.addEventListener('touchstart', handleStart, {passive: false});
-    btn.addEventListener('touchend', handleEnd, {passive: false});
-    btn.addEventListener('mousedown', handleStart);
-    btn.addEventListener('mouseup', handleEnd);
-});
-  // 1. Define the config object FIRST
+    // 1. Define the config object globally
     window.Module = {
         noInitialRun: true,
         canvas: document.getElementById('canvas'),
         print: (text) => console.log(text),
         printErr: (text) => console.error(text),
         locateFile: (path) => path.endsWith('.wasm') ? 'snes9x_libretro.wasm' : path,
+        onRuntimeInitialized: function() {
+            console.log("Core Ready.");
+        }
     };
 
     // 2. ROM Loading Logic
@@ -509,36 +450,107 @@ document.querySelectorAll('.touch-btn').forEach(btn => {
         reader.onload = function(event) {
             const data = new Uint8Array(event.target.result);
             
-            // Check if Module.FS (from the initialized instance) is ready
             if (Module.FS) {
-                Module.FS.writeFile('/game.sfc', data);
-                
-                // Resume audio for browser requirements
-                const audioCtx = window.SDL2 ? SDL2.audioContext : null;
-                if (audioCtx) audioCtx.resume();
+                try {
+                    Module.FS.writeFile('/game.sfc', data);
+                    
+                    // Resume audio context for mobile browsers
+                    if (window.SDL2 && SDL2.audioContext) {
+                        SDL2.audioContext.resume();
+                    }
 
-                Module.callMain(['/game.sfc']);
+                    Module.callMain(['/game.sfc']);
+                    Module.canvas.focus(); // Ensure input is captured
+                } catch(err) {
+                    console.error("FS Error:", err);
+                }
             } else {
-                alert("Core still loading, please try again in a second.");
+                alert("Core still loading, please wait.");
             }
         };
         reader.readAsArrayBuffer(file);
+    });
+
+    // 3. Input Bridge
+    const keyMap = {
+        "38": { key: "ArrowUp", code: "ArrowUp" },
+        "40": { key: "ArrowDown", code: "ArrowDown" },
+        "37": { key: "ArrowLeft", code: "ArrowLeft" },
+        "39": { key: "ArrowRight", code: "ArrowRight" },
+        "88": { key: "x", code: "KeyX" },     
+        "90": { key: "z", code: "KeyZ" },     
+        "83": { key: "s", code: "KeyS" },     
+        "65": { key: "a", code: "KeyA" },     
+        "81": { key: "q", code: "KeyQ" },     
+        "87": { key: "w", code: "KeyW" },     
+        "13": { key: "Enter", code: "Enter" }, 
+        "16": { key: "Shift", code: "ShiftLeft" } 
+    };
+
+    const simulateKey = (keyCode, type) => {
+        const data = keyMap[keyCode.toString()];
+        if (!data) return;
+
+        const event = new KeyboardEvent(type, {
+            key: data.key,
+            code: data.code,
+            keyCode: parseInt(keyCode),
+            which: parseInt(keyCode),
+            bubbles: true,
+            cancelable: true
+        });
+
+        // Dispatch to window AND directly to Canvas
+        window.dispatchEvent(event);
+        if (Module.canvas) {
+            Module.canvas.dispatchEvent(event);
+        }
+    };
+
+    // 4. Attach Touch Events
+    document.querySelectorAll('.touch-btn').forEach(btn => {
+        const keyCode = btn.dataset.key;
+        
+        const handleStart = (e) => {
+            e.preventDefault();
+            btn.classList.add('active');
+            if (navigator.vibrate) navigator.vibrate(10);
+            simulateKey(keyCode, 'keydown');
+        };
+        
+        const handleEnd = (e) => {
+            e.preventDefault();
+            btn.classList.remove('active');
+            simulateKey(keyCode, 'keyup');
+        };
+
+        btn.addEventListener('touchstart', handleStart, {passive: false});
+        btn.addEventListener('touchend', handleEnd, {passive: false});
+        btn.addEventListener('mousedown', handleStart);
+        btn.addEventListener('mouseup', handleEnd);
+    });
+
+    // UI Helpers
+    window.closeSettings = () => {
+        document.getElementById('settingsModal').classList.remove('active');
+    };
+    document.getElementById('btnSettings').addEventListener('click', () => {
+        document.getElementById('settingsModal').classList.add('active');
     });
 </script>
 
 <script type="module">
     import createModule from './snes9x_libretro.js';
     
-    // Initialize the WASM using the factory function
     createModule(window.Module).then((instance) => {
-        // Update the global Module with the running instance (includes FS, callMain, etc)
-        window.Module = instance;
+        // Sync the instance back to the window.Module
+        Object.assign(window.Module, instance);
         console.log("WebAssembly Module Loaded Successfully");
     }).catch(err => {
-        console.error("Failed to load WASM:", err);
+        console.error("Critical Load Error:", err);
     });
 </script>
-  
+
 <script type="module">
   import createModule from './snes9x_libretro.js';
   
