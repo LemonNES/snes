@@ -529,8 +529,16 @@
         btn.addEventListener('mouseleave', handleEnd);
     });
 </script>
-
-<script async src="snes9x_libretro.js"></script>
+<script type="module">
+  import createModule from './snes9x_libretro.js';
+  
+  
+  createModule(Module).then((instance) => {
+  
+    window.Module = instance;
+    console.log("SNES Core Initialized");
+  });
+</script>
 
 </body>
 </html>
