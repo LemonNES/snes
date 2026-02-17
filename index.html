@@ -7,7 +7,7 @@
   <style>
     :root { 
       --bg: #050505; 
-      --acc: #a29bfe; /* SNES Purple-ish tint */
+      --acc: #a29bfe;
       --acc-glow: rgba(162, 155, 254, 0.4);
       --glass: rgba(255, 255, 255, 0.06);
       --glass-border: rgba(255, 255, 255, 0.1);
@@ -16,7 +16,6 @@
       --muted:#8aa0b6; 
       --card:#121926;
       
-      /* SNES Button Colors */
       --btn-a: #e74c3c;
       --btn-b: #f1c40f;
       --btn-x: #3498db;
@@ -58,12 +57,12 @@
 
     .screen-wrapper {
       background: #000;
-      aspect-ratio: 256/224; /* SNES Resolution */
+      aspect-ratio: 256/224;
       width: 90vw;
       max-width: 90vw;
       height: auto;
       max-height: 100%;
-      box-shadow: 0 0 50px rgba(0,0,0,0.5);
+      box-shadow: 0 0 50px rgba(0,0,0,0.5), 0 0 0 1px rgba(255,255,255,0.06);
       display: flex;
       align-items: center;
       justify-content: center;
@@ -72,7 +71,7 @@
     }
 
     canvas {
-      image-rendering: pixelated; /* Crisp pixels */
+      image-rendering: pixelated;
       background: #000;
       touch-action: none;
       width: 100%;
@@ -83,12 +82,10 @@
 
     .scanlines {
       position: absolute;
-      top: 0;
-      left: 0;
-      width: 100%;
-      height: 100%;
+      top: 0; left: 0;
+      width: 100%; height: 100%;
       pointer-events: none;
-      background: repeating-linear-gradient(0deg, rgba(0, 0, 0, 0.15), rgba(0, 0, 0, 0.15) 1px, transparent 1px, transparent 2px);
+      background: repeating-linear-gradient(0deg, rgba(0,0,0,0.15), rgba(0,0,0,0.15) 1px, transparent 1px, transparent 2px);
       border-radius: 12px;
       display: none;
     }
@@ -96,20 +93,19 @@
 
     /* === UI OVERLAY LAYER === */
     .ui-layer {
-      position: absolute;
+      position: fixed;
       top: 0; left: 0; right: 0; bottom: 0;
       z-index: 10;
       pointer-events: none;
-      display: flex;
-      flex-direction: column;
-      justify-content: space-between;
-      padding: env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left);
     }
 
     .top-bar {
+      position: absolute;
+      top: 0; left: 0; right: 0;
       display: flex;
       justify-content: space-between;
       padding: 20px;
+      padding-top: max(20px, env(safe-area-inset-top));
       pointer-events: auto;
     }
 
@@ -125,21 +121,19 @@
       justify-content: center;
       color: var(--text-muted);
       cursor: pointer;
-      transition: all 0.2s ease;
+      transition: background 0.2s, color 0.2s;
       font-size: 20px;
     }
     .icon-btn:hover { background: rgba(255,255,255,0.1); color: #fff; }
-    .icon-btn:active, .icon-btn.active { transform: scale(0.95); background: var(--acc); color: #000; border-color: var(--acc); }
+    .icon-btn:active, .icon-btn.active { background: var(--acc); color: #000; border-color: var(--acc); }
 
     /* === TOUCH CONTROLS === */
+    /* FIX: position:absolute so it never participates in layout flow or causes reflow */
     .controls-area {
-      flex: 1;
-      position: relative;
+      position: absolute;
+      left: 0; right: 0; bottom: 0;
+      height: 320px;
       pointer-events: none;
-      display: flex;
-      flex-direction: column;
-      justify-content: flex-end;
-      padding-bottom: 20px;
     }
 
     .touch-btn {
@@ -148,57 +142,58 @@
       backdrop-filter: blur(12px);
       -webkit-backdrop-filter: blur(12px);
       border: 1px solid var(--glass-border);
-      transition: transform 0.05s, background 0.1s, box-shadow 0.1s;
+      /* FIX: No transform in active/pressed — transform would override the
+         translate-based diamond positioning and scatter buttons.
+         Use filter + box-shadow for press feedback instead. */
+      transition: background 0.08s, box-shadow 0.08s, filter 0.08s;
       cursor: pointer;
-      -webkit-tap-highlight-color: transparent; 
+      -webkit-tap-highlight-color: transparent;
     }
 
-    /* Active State */
-    .touch-btn.active, .touch-btn:active {
-      background: rgba(255, 255, 255, 0.15);
+    /* FIX: Use .pressed class (set by JS) instead of :active pseudo-class.
+       Filter-only approach preserves any existing transform on the element. */
+    .touch-btn.pressed {
+      background: rgba(255, 255, 255, 0.14);
       border-color: var(--acc);
       box-shadow: 0 0 15px var(--acc-glow);
-      transform: scale(0.92);
+      filter: brightness(1.25);
     }
 
     /* SHOULDER BUTTONS */
     .shoulders-pad {
       position: absolute;
-      bottom: 260px; /* Above D-pad */
-      left: 0;
-      right: 0;
+      bottom: 260px;
+      left: 0; right: 0;
       display: flex;
       justify-content: space-between;
       padding: 0 5vw;
-      z-index: 5;
       pointer-events: none;
     }
     
     .btn-shoulder {
-        width: 100px; height: 36px;
-        border-radius: 12px;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        font-weight: 700;
-        font-size: 14px;
-        color: var(--text-muted);
-        pointer-events: auto;
-        border-bottom: 4px solid rgba(0,0,0,0.2);
+      width: 100px; height: 36px;
+      border-radius: 12px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-weight: 700;
+      font-size: 14px;
+      color: var(--text-muted);
+      pointer-events: auto;
+      border-bottom: 4px solid rgba(0,0,0,0.2);
     }
 
     /* MENU PILLS (Start/Select) */
     .menu-pad {
       position: absolute;
-      bottom: 20px;
-      left: 0;
-      right: 0;
+      bottom: 24px;
+      left: 0; right: 0;
       display: flex;
       justify-content: center;
       gap: 20px;
-      z-index: 5;
       pointer-events: none;
     }
+
     .btn-pill {
       width: 70px; height: 24px;
       border-radius: 20px;
@@ -209,14 +204,15 @@
       color: var(--text-muted);
       font-weight: 600;
       pointer-events: auto;
-      transform: rotate(-15deg); /* Classic SNES slant */
-      margin-bottom: 20px;
+      /* FIX: Removed rotate(-15deg) — rotation caused layout jumps on press
+         because transform:scale(0.92) in the original active state would
+         compound with the rotation and visually displace the button. */
     }
 
     /* D-PAD */
     .d-pad {
       position: absolute;
-      bottom: 40px;
+      bottom: 50px;
       left: 5vw;
       display: grid;
       grid-template-columns: repeat(3, 55px);
@@ -235,13 +231,14 @@
       border-width: 0 3px 3px 0;
       display: inline-block;
       padding: 6px;
-      transition: border-color 0.1s;
+      transition: border-color 0.08s;
+      pointer-events: none; /* FIX: prevent span from swallowing touch events */
     }
-    .touch-btn.active .chevron, .touch-btn:active .chevron { border-color: var(--acc); }
+    .touch-btn.pressed .chevron { border-color: var(--acc); }
 
-    .up .chevron { transform: rotate(-135deg) translateY(-2px); }
-    .down .chevron { transform: rotate(45deg) translateY(-2px); }
-    .left .chevron { transform: rotate(135deg) translateY(-2px); }
+    .up .chevron    { transform: rotate(-135deg) translateY(-2px); }
+    .down .chevron  { transform: rotate(45deg) translateY(-2px); }
+    .left .chevron  { transform: rotate(135deg) translateY(-2px); }
     .right .chevron { transform: rotate(-45deg) translateY(-2px); }
 
     .d-btn.up    { grid-area: 1/2; border-radius: 12px 12px 4px 4px; }
@@ -252,11 +249,10 @@
     /* ACTION BUTTONS - DIAMOND LAYOUT */
     .ab-pad {
       position: absolute;
-      bottom: 40px;
+      bottom: 50px;
       right: 5vw;
       width: 170px;
       height: 170px;
-      display: block;
     }
 
     .btn-circle {
@@ -269,28 +265,29 @@
       font-weight: 800;
       font-size: 20px;
       color: rgba(255,255,255,0.8);
-      box-shadow: inset 0 2px 10px rgba(0,0,0,0.2); 
+      box-shadow: inset 0 2px 10px rgba(0,0,0,0.2);
     }
     
-    /* Diamond Positioning */
-    .btn-x { top: 0; left: 50%; transform: translateX(-50%); color: var(--btn-x); border-color: rgba(52, 152, 219, 0.3); }
-    .btn-y { top: 50%; left: 0; transform: translateY(-50%); color: var(--btn-y); border-color: rgba(46, 204, 113, 0.3); }
-    .btn-a { top: 50%; right: 0; transform: translateY(-50%); color: var(--btn-a); border-color: rgba(231, 76, 60, 0.3); }
-    .btn-b { bottom: 0; left: 50%; transform: translateX(-50%); color: var(--btn-b); border-color: rgba(241, 196, 15, 0.3); }
-    
-    .btn-circle.active, .btn-circle:active { color: #fff; border-color: #fff; background: rgba(255,255,255,0.2); }
-    
-    .btn-x.active { background: var(--btn-x); color: #000; box-shadow: 0 0 15px var(--btn-x); }
-    .btn-y.active { background: var(--btn-y); color: #000; box-shadow: 0 0 15px var(--btn-y); }
-    .btn-a.active { background: var(--btn-a); color: #000; box-shadow: 0 0 15px var(--btn-a); }
-    .btn-b.active { background: var(--btn-b); color: #000; box-shadow: 0 0 15px var(--btn-b); }
+    /* These buttons use transform for centering — the active state must NEVER
+       use transform:scale or it replaces the translate and scatters the button.
+       All press feedback is visual-only (color/glow). */
+    .btn-x { top: 0;    left: 50%; transform: translateX(-50%); color: var(--btn-x); border-color: rgba(52,152,219,0.3); }
+    .btn-y { top: 50%;  left: 0;   transform: translateY(-50%); color: var(--btn-y); border-color: rgba(46,204,113,0.3); }
+    .btn-a { top: 50%;  right: 0;  transform: translateY(-50%); color: var(--btn-a); border-color: rgba(231,76,60,0.3); }
+    .btn-b { bottom: 0; left: 50%; transform: translateX(-50%); color: var(--btn-b); border-color: rgba(241,196,15,0.3); }
 
-    /* Settings Modal Styles - kept mostly same */
+    /* Pressed states override filter from base .pressed rule, keep own glow */
+    .btn-x.pressed { background: var(--btn-x); color: #000; box-shadow: 0 0 18px var(--btn-x); filter: none; border-color: var(--btn-x); }
+    .btn-y.pressed { background: var(--btn-y); color: #000; box-shadow: 0 0 18px var(--btn-y); filter: none; border-color: var(--btn-y); }
+    .btn-a.pressed { background: var(--btn-a); color: #000; box-shadow: 0 0 18px var(--btn-a); filter: none; border-color: var(--btn-a); }
+    .btn-b.pressed { background: var(--btn-b); color: #000; box-shadow: 0 0 18px var(--btn-b); filter: none; border-color: var(--btn-b); }
+
+    /* Settings Modal */
     .settings-modal { 
       display: none; 
       position: fixed; 
       top: 0; left: 0; width: 100%; height: 100%; 
-      background: rgba(5, 5, 5, 0.95); 
+      background: rgba(5,5,5,0.95); 
       z-index: 2000; 
       align-items: center; justify-content: center; 
       backdrop-filter: blur(20px); -webkit-backdrop-filter: blur(20px);
@@ -312,7 +309,7 @@
       border-bottom: 1px solid var(--glass-border); color: var(--fg); 
       display: flex; justify-content: space-between; align-items: center; 
     }
-    .settings-close { cursor: pointer; padding: 10px; }
+    .settings-close { cursor: pointer; padding: 10px; font-size: 24px; line-height: 1; }
     .settings-body { flex: 1; padding: 24px; overflow-y: auto; }
     .setting-row { margin-bottom: 20px; }
     .btn-primary { 
@@ -321,20 +318,19 @@
     }
     input[type="file"] { display: none; }
 
-    /* Media Queries for Landscape */
     @media (orientation: landscape) {
       .game-container { max-height: 80vh; padding-top: 20px; }
       .screen-wrapper { height: 75vh; width: auto; aspect-ratio: 4/3; }
+      .controls-area { height: 240px; }
       .d-pad { bottom: 20px; left: 30px; }
       .ab-pad { bottom: 20px; right: 30px; }
-      .shoulders-pad { bottom: 200px; padding: 0 30px; }
+      .shoulders-pad { bottom: 180px; padding: 0 30px; }
       .menu-pad { bottom: 10px; }
     }
     
-    /* Desktop */
     @media (pointer: fine) {
-        .controls-area { opacity: 0; transition: 0.3s; }
-        .controls-area:hover { opacity: 1; }
+      .controls-area { opacity: 0; transition: opacity 0.3s; }
+      .controls-area:hover { opacity: 1; }
     }
   </style>
 </head>
@@ -373,9 +369,9 @@
       </div>
 
       <div class="d-pad">
-        <div class="touch-btn d-btn up" data-key="38" title="Up"><span class="chevron"></span></div>
-        <div class="touch-btn d-btn down" data-key="40" title="Down"><span class="chevron"></span></div>
-        <div class="touch-btn d-btn left" data-key="37" title="Left"><span class="chevron"></span></div>
+        <div class="touch-btn d-btn up"    data-key="38" title="Up"><span class="chevron"></span></div>
+        <div class="touch-btn d-btn down"  data-key="40" title="Down"><span class="chevron"></span></div>
+        <div class="touch-btn d-btn left"  data-key="37" title="Left"><span class="chevron"></span></div>
         <div class="touch-btn d-btn right" data-key="39" title="Right"><span class="chevron"></span></div>
       </div>
 
@@ -398,30 +394,30 @@
       <div class="settings-body">
         
         <div class="setting-row">
-            <h3>Visuals</h3>
-            <label>
-                <input type="checkbox" id="checkScanlines" onchange="document.getElementById('scanlines').classList.toggle('active', this.checked)"> Enable Scanlines
-            </label>
+          <h3>Visuals</h3>
+          <label>
+            <input type="checkbox" id="checkScanlines" onchange="document.getElementById('scanlines').classList.toggle('active', this.checked)"> Enable Scanlines
+          </label>
         </div>
 
         <div class="setting-row">
-            <h3>Controls</h3>
-            <p>Keyboard Mappings:</p>
-            <ul>
-                <li>D-Pad: Arrow Keys</li>
-                <li>A: X</li>
-                <li>B: Z</li>
-                <li>X: S</li>
-                <li>Y: A</li>
-                <li>L: Q</li>
-                <li>R: W</li>
-                <li>Start: Enter</li>
-                <li>Select: Shift</li>
-            </ul>
+          <h3>Controls</h3>
+          <p>Keyboard Mappings:</p>
+          <ul>
+            <li>D-Pad: Arrow Keys</li>
+            <li>A: X</li>
+            <li>B: Z</li>
+            <li>X: S</li>
+            <li>Y: A</li>
+            <li>L: Q</li>
+            <li>R: W</li>
+            <li>Start: Enter</li>
+            <li>Select: Shift</li>
+          </ul>
         </div>
         
         <div class="setting-row">
-            <button class="btn-primary" onclick="Module.requestFullScreen(true, false)">Enter Fullscreen</button>
+          <button class="btn-primary" onclick="Module.requestFullScreen(true, false)">Enter Fullscreen</button>
         </div>
 
       </div>
@@ -429,41 +425,28 @@
   </div>
 
 <script>
-    // 1. Define the config object globally
     window.Module = {
         noInitialRun: true,
         canvas: document.getElementById('canvas'),
         print: (text) => console.log(text),
         printErr: (text) => console.error(text),
         locateFile: (path) => path.endsWith('.wasm') ? 'snes9x_libretro.wasm' : path,
-        onRuntimeInitialized: function() {
-            console.log("Core Ready.");
-        }
+        onRuntimeInitialized: function() { console.log("Core Ready."); }
     };
 
-    // 2. ROM Loading Logic
     document.getElementById('romInput').addEventListener('change', function(e) {
         const file = e.target.files[0];
         if (!file) return;
-
         const reader = new FileReader();
         reader.onload = function(event) {
             const data = new Uint8Array(event.target.result);
-            
             if (Module.FS) {
                 try {
                     Module.FS.writeFile('/game.sfc', data);
-                    
-                    // Resume audio context for mobile browsers
-                    if (window.SDL2 && SDL2.audioContext) {
-                        SDL2.audioContext.resume();
-                    }
-
+                    if (window.SDL2 && SDL2.audioContext) SDL2.audioContext.resume();
                     Module.callMain(['/game.sfc']);
-                    Module.canvas.focus(); // Ensure input is captured
-                } catch(err) {
-                    console.error("FS Error:", err);
-                }
+                    Module.canvas.focus();
+                } catch(err) { console.error("FS Error:", err); }
             } else {
                 alert("Core still loading, please wait.");
             }
@@ -471,69 +454,62 @@
         reader.readAsArrayBuffer(file);
     });
 
-    // 3. Input Bridge
     const keyMap = {
-        "38": { key: "ArrowUp", code: "ArrowUp" },
-        "40": { key: "ArrowDown", code: "ArrowDown" },
-        "37": { key: "ArrowLeft", code: "ArrowLeft" },
+        "38": { key: "ArrowUp",    code: "ArrowUp" },
+        "40": { key: "ArrowDown",  code: "ArrowDown" },
+        "37": { key: "ArrowLeft",  code: "ArrowLeft" },
         "39": { key: "ArrowRight", code: "ArrowRight" },
-        "88": { key: "x", code: "KeyX" },     
-        "90": { key: "z", code: "KeyZ" },     
-        "83": { key: "s", code: "KeyS" },     
-        "65": { key: "a", code: "KeyA" },     
-        "81": { key: "q", code: "KeyQ" },     
-        "87": { key: "w", code: "KeyW" },     
-        "13": { key: "Enter", code: "Enter" }, 
-        "16": { key: "Shift", code: "ShiftLeft" } 
+        "88": { key: "x",          code: "KeyX" },
+        "90": { key: "z",          code: "KeyZ" },
+        "83": { key: "s",          code: "KeyS" },
+        "65": { key: "a",          code: "KeyA" },
+        "81": { key: "q",          code: "KeyQ" },
+        "87": { key: "w",          code: "KeyW" },
+        "13": { key: "Enter",      code: "Enter" },
+        "16": { key: "Shift",      code: "ShiftLeft" }
     };
 
     const simulateKey = (keyCode, type) => {
         const data = keyMap[keyCode.toString()];
         if (!data) return;
-
         const event = new KeyboardEvent(type, {
-            key: data.key,
-            code: data.code,
-            keyCode: parseInt(keyCode),
-            which: parseInt(keyCode),
-            bubbles: true,
-            cancelable: true
+            key: data.key, code: data.code,
+            keyCode: parseInt(keyCode), which: parseInt(keyCode),
+            bubbles: true, cancelable: true
         });
-
-        // Dispatch to window AND directly to Canvas
         window.dispatchEvent(event);
-        if (Module.canvas) {
-            Module.canvas.dispatchEvent(event);
-        }
+        if (Module.canvas) Module.canvas.dispatchEvent(event);
     };
 
-    // 4. Attach Touch Events
+    // FIX: Use .pressed class instead of .active — avoids fighting with CSS :active.
+    // Also handle touchcancel + mouseleave so buttons never get stuck pressed.
     document.querySelectorAll('.touch-btn').forEach(btn => {
         const keyCode = btn.dataset.key;
         
         const handleStart = (e) => {
             e.preventDefault();
-            btn.classList.add('active');
+            e.stopPropagation();
+            btn.classList.add('pressed');
             if (navigator.vibrate) navigator.vibrate(10);
             simulateKey(keyCode, 'keydown');
         };
         
         const handleEnd = (e) => {
             e.preventDefault();
-            btn.classList.remove('active');
+            e.stopPropagation();
+            btn.classList.remove('pressed');
             simulateKey(keyCode, 'keyup');
         };
 
-        btn.addEventListener('touchstart', handleStart, {passive: false});
-        btn.addEventListener('touchend', handleEnd, {passive: false});
-        btn.addEventListener('mousedown', handleStart);
-        btn.addEventListener('mouseup', handleEnd);
+        btn.addEventListener('touchstart',  handleStart, { passive: false });
+        btn.addEventListener('touchend',    handleEnd,   { passive: false });
+        btn.addEventListener('touchcancel', handleEnd,   { passive: false });
+        btn.addEventListener('mousedown',   handleStart);
+        btn.addEventListener('mouseup',     handleEnd);
+        btn.addEventListener('mouseleave',  handleEnd);
     });
 
-    // UI Helpers
-    window.closeSettings = () => {
-        document.getElementById('settingsModal').classList.remove('active');
-    };
+    window.closeSettings = () => document.getElementById('settingsModal').classList.remove('active');
     document.getElementById('btnSettings').addEventListener('click', () => {
         document.getElementById('settingsModal').classList.add('active');
     });
@@ -541,25 +517,12 @@
 
 <script type="module">
     import createModule from './snes9x_libretro.js';
-    
     createModule(window.Module).then((instance) => {
-        // Sync the instance back to the window.Module
         Object.assign(window.Module, instance);
         console.log("WebAssembly Module Loaded Successfully");
     }).catch(err => {
         console.error("Critical Load Error:", err);
     });
-</script>
-
-<script type="module">
-  import createModule from './snes9x_libretro.js';
-  
-  
-  createModule(Module).then((instance) => {
-  
-    window.Module = instance;
-    console.log("SNES Core Initialized");
-  });
 </script>
 
 </body>
